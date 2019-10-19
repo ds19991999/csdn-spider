@@ -4,7 +4,7 @@
 
 ## 一、运行环境
 
-需要安装`WebDriver`驱动，https://chromedriver.chromium.org/downloads，下载与本地对应的`chrome`驱动后，将其添加至环境变量`$PATH`
+需要安装`WebDriver`驱动，https://chromedriver.chromium.org/downloads ，下载与本地对应的`chrome`驱动后，将其添加至环境变量`$PATH`
 
 ```shell
 python3
