@@ -4,7 +4,6 @@
 import os, time, re
 import requests
 import threading
-import logging
 from bs4 import BeautifulSoup, Comment
 from selenium import webdriver
 from tomd import Tomd
@@ -154,7 +153,7 @@ class CSDN(object):
 	
 	def write_articals(self, username:str):
 		"""将博文写入本地"""
-		print("[++] 正在爬取 {} 的博文......".format(username))
+		print("[++] 正在爬取 {} 的博文 ......".format(username))
 		artical = Article()
 		reademe_path = result_file(username,file_name="README.md")
 		with open(reademe_path,'w', encoding='utf-8') as reademe_file:
@@ -167,13 +166,16 @@ class CSDN(object):
 				reademe_file.write(text)
 				file_name = str(i) + "." + re.sub(r'[\/:：*?"<>|]','-', article_title) + ".md"
 				artical_path = result_file(folder_name=username, file_name=file_name)
-				md_content = artical.get_md(article_href)
-				md_head = "# " + str(i) + "." + article_title + "\n"
-				md = md_head + md_content
-				with open(artical_path, "w", encoding="utf-8") as artical_file:
-					artical_file.write(md)
+				try:
+					md_content = artical.get_md(article_href)
+					md_head = "# " + str(i) + "." + article_title + "\n"
+					md = md_head + md_content
+					with open(artical_path, "w", encoding="utf-8") as artical_file:
+						artical_file.write(md)
+				except Exception:
+					print("[----] {}. 处理URL异常：{}".format(str(i), article_href))
 				i += 1
-				time.sleep(2)
+				# time.sleep(2)
 
 	def spider(self):
 		"""将爬取到的文章保存到本地"""
