@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+
 import os, time, re
+import contextlib
+import sys
 import requests
 import threading
 from bs4 import BeautifulSoup, Comment
 from .tomd import Tomd
 
 
-def result_file(folder_name, file_name, article_name):
-	folder = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../"+article_name, folder_name)
+def result_file(folder_username, file_name, folder_name):
+	folder = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", folder_name, folder_username)
 	if not os.path.exists(folder):
 		os.makedirs(folder)
 		path = os.path.join(folder, file_name)
@@ -77,17 +80,16 @@ class TaskQueue(object):
 
 
 class CSDN(object):
-	def __init__(self, username, article__folder_name):
+	def __init__(self, username, folder_name):
 		self.headers = {
 			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.70 Safari/537.36"
 		}
 		self.username = username
 		self.TaskQueue = TaskQueue()
-		self.article__folder_name = article__folder_name
+		self.folder_name = folder_name
 		self.url_num = 1
 
 	def start(self):
-		"""获取文章标题和链接"""
 		num = 0
 		while True:
 			num += 1
@@ -98,14 +100,14 @@ class CSDN(object):
 			articles = soup.find_all('div', attrs={"class":"article-item-box csdn-tracking-statistics"})
 			if len(articles) > 0:
 				for article in articles:
-					article_title = article.a.text.strip().replace('        ',': ')
+					article_title = article.a.text.strip().replace('        ','：')
 					article_href = article.a['href']
-					self.TaskQueue.InsertUnVisitedList([article_title, article_href])
+					with ensure_memory(sys.getsizeof(self.TaskQueue.UnVisitedList)):
+						self.TaskQueue.InsertUnVisitedList([article_title, article_href])
 			else:
 				break
 	
 	def get_md(self, url):
-		"""爬取文章"""
 		response = requests.get(url=url, headers=self.headers)
 		html = response.text
 		soup = BeautifulSoup(html, 'lxml')
@@ -128,9 +130,10 @@ class CSDN(object):
 
 
 	def write_readme(self):
-		"""生成readme"""
-		print("[++] 正在爬取 {} 的博文 ......".format(self.username))
-		reademe_path = result_file(self.username,file_name="README.md",article_name=self.article__folder_name)
+		print("+"*100)
+		print("[++] 开始爬取 {} 的博文 ......".format(self.username))
+		print("+"*100)
+		reademe_path = result_file(self.username,file_name="README.md",folder_name=self.folder_name)
 		with open(reademe_path,'w', encoding='utf-8') as reademe_file:
 			readme_head = "# " + self.username + " 的博文\n"
 			reademe_file.write(readme_head)
@@ -140,17 +143,16 @@ class CSDN(object):
 					self.url_num += 1
 		self.url_num = 1
 	
-	def spider(self):
-		"""爬取所有文章"""
+	def get_all_articles(self):
 		try:
 			while True:
 				[article_title,article_href] = self.TaskQueue.PopUnVisitedList()
 				try:
-					print("[++++] 正在处理URL：{}".format(article_href))
 					file_name = re.sub(r'[\/:：*?"<>|]','-', article_title) + ".md"
-					artical_path = result_file(folder_name=self.username, file_name=file_name, article_name=self.article__folder_name)
+					artical_path = result_file(folder_username=self.username, file_name=file_name, folder_name=self.folder_name)
 					md_head = "# " + article_title + "\n"
 					md = md_head + self.get_md(article_href)
+					print("[++++] 正在处理URL：{}".format(article_href))
 					with open(artical_path, "w", encoding="utf-8") as artical_file:
 						artical_file.write(md)
 				except Exception:
@@ -158,29 +160,55 @@ class CSDN(object):
 				self.url_num += 1
 		except Exception:
 			pass
-	
+
 	def muti_spider(self, thread_num):
 		while True:
 			if self.TaskQueue.getUnVisitedListLength() < 1:
 				break
 			thread_list = []
 			for i in range(thread_num):
-				th = threading.Thread(target=self.spider)
+				th = threading.Thread(target=self.get_all_articles)
 				thread_list.append(th)
 			for th in thread_list:
 				th.start()
-			
 
 
-def run(username: str = "ds19991999", thread_num: int = 10, article__folder_name: str = "articles"):
-	if not os.path.exists(article__folder_name):
-		os.makedirs(article__folder_name)
-	csdn = CSDN(username,article__folder_name)
+lock = threading.Lock()
+total_mem= 1024 * 1024 * 500 #500MB spare memory
+@contextlib.contextmanager
+def ensure_memory(size):
+    global total_mem
+    while 1:
+        with lock:
+            if total_mem > size:
+                total_mem-= size
+                break
+        time.sleep(5)
+    yield 
+    with lock:
+        total_mem += size
+
+
+def spider_user(username: str, thread_num: int = 10, folder_name: str = "articles"):
+	if not os.path.exists(folder_name):
+		os.makedirs(folder_name)
+	csdn = CSDN(username,folder_name)
 	csdn.start()
-	csdn.write_readme()
-	csdn.muti_spider(thread_num)
+	th1 = threading.Thread(target=csdn.write_readme)
+	th1.start()
+	th2 = threading.Thread(target=csdn.muti_spider, args=(thread_num,))
+	th2.start()
+
+
+def spider(usernames: list, thread_num: int = 10, folder_name: str = "articles"):
+	for username in usernames:
+		try:
+			user_thread = threading.Thread(target=spider_user,args=(username, thread_num, folder_name))
+			user_thread.start()
+			print("[++] 开启爬取 {} 博文进程成功 ......".format(username))
+		except Exception:
+			print("[--] 开启爬取 {} 博文进程出现异常 ......".format(username))
 
 
 if __name__ == "__main__":
-	run("ds19991999", 10, "articles")
-
+	spider(["ds19991999"])

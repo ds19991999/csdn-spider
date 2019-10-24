@@ -11,12 +11,9 @@ python3 -m pip install -r requirements.txt
 
 ## 爬取用户全部博文
 ```python
-#!/usr/bin/env python
-# coding: utf-8
-
-if __name__ == "__main__":
-    import CSDN
-    CSDN.run("ds19991999")
+import csdn
+csdn.spider(["ds19991999", "u013088062"], 5)
+# 参数 usernames: list, thread_num: int = 10, folder_name: str = "articles"
 ```
 
 ## LICENSE

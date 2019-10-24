@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import csdn
+
 if __name__ == "__main__":
-    import CSDN
-    CSDN.run("ds19991999")
+    csdn.spider(["ds19991999", "u013088062"], 5)
