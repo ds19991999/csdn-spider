@@ -91,21 +91,19 @@ class CSDN(object):
 
 	def start(self):
 		num = 0
-		while True:
+		articles = [None]
+		while len(articles) > 0:
 			num += 1
 			url = u'https://blog.csdn.net/' + self.username + '/article/list/' + str(num)
 			response = requests.get(url=url, headers=self.headers)
 			html = response.text
 			soup = BeautifulSoup(html, "html.parser")
 			articles = soup.find_all('div', attrs={"class":"article-item-box csdn-tracking-statistics"})
-			if len(articles) > 0:
-				for article in articles:
-					article_title = article.a.text.strip().replace('        ','：')
-					article_href = article.a['href']
-					with ensure_memory(sys.getsizeof(self.TaskQueue.UnVisitedList)):
-						self.TaskQueue.InsertUnVisitedList([article_title, article_href])
-			else:
-				break
+			for article in articles:
+				article_title = article.a.text.strip().replace('        ','：')
+				article_href = article.a['href']
+				with ensure_memory(sys.getsizeof(self.TaskQueue.UnVisitedList)):
+					self.TaskQueue.InsertUnVisitedList([article_title, article_href])
 	
 	def get_md(self, url):
 		response = requests.get(url=url, headers=self.headers)
@@ -162,9 +160,7 @@ class CSDN(object):
 			pass
 
 	def muti_spider(self, thread_num):
-		while True:
-			if self.TaskQueue.getUnVisitedListLength() < 1:
-				break
+		while self.TaskQueue.getUnVisitedListLength() > 0:
 			thread_list = []
 			for i in range(thread_num):
 				th = threading.Thread(target=self.get_all_articles)
