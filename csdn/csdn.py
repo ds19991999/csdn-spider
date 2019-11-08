@@ -14,13 +14,26 @@ from .tomd import Tomd
 def result_file(folder_username, file_name, folder_name):
 	folder = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", folder_name, folder_username)
 	if not os.path.exists(folder):
-		os.makedirs(folder)
+		try:
+			os.makedirs(folder)
+		except Exception:
+			pass
 		path = os.path.join(folder, file_name)
 		file = open(path,"w")
 		file.close()
 	else:
 		path = os.path.join(folder, file_name)
 	return path
+
+
+def get_headers(cookie_path:str):
+	cookies = {}
+	with open(cookie_path, "r", encoding="utf-8") as f:
+		cookie_list = f.readlines()
+	for line in cookie_list:
+		cookie = line.split(":")
+		cookies[cookie[0]] = str(cookie[1]).strip()
+	return cookies
 
 
 def delete_ele(soup:BeautifulSoup, tags:list):
@@ -80,10 +93,12 @@ class TaskQueue(object):
 
 
 class CSDN(object):
-	def __init__(self, username, folder_name):
-		self.headers = {
-			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.70 Safari/537.36"
-		}
+	def __init__(self, username, folder_name, cookie_path):
+		# self.headers = {
+		# 	"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.70 Safari/537.36"
+		# }
+		self.headers = get_headers(cookie_path)
+		self.s = requests.Session()
 		self.username = username
 		self.TaskQueue = TaskQueue()
 		self.folder_name = folder_name
@@ -95,7 +110,7 @@ class CSDN(object):
 		while len(articles) > 0:
 			num += 1
 			url = u'https://blog.csdn.net/' + self.username + '/article/list/' + str(num)
-			response = requests.get(url=url, headers=self.headers)
+			response = self.s.get(url=url, headers=self.headers)
 			html = response.text
 			soup = BeautifulSoup(html, "html.parser")
 			articles = soup.find_all('div', attrs={"class":"article-item-box csdn-tracking-statistics"})
@@ -106,7 +121,7 @@ class CSDN(object):
 					self.TaskQueue.InsertUnVisitedList([article_title, article_href])
 	
 	def get_md(self, url):
-		response = requests.get(url=url, headers=self.headers)
+		response = self.s.get(url=url, headers=self.headers)
 		html = response.text
 		soup = BeautifulSoup(html, 'lxml')
 		content = soup.select_one("#content_views")
@@ -185,10 +200,10 @@ def ensure_memory(size):
         total_mem += size
 
 
-def spider_user(username: str, thread_num: int = 10, folder_name: str = "articles"):
+def spider_user(username: str, cookie_path:str, thread_num: int = 10, folder_name: str = "articles"):
 	if not os.path.exists(folder_name):
 		os.makedirs(folder_name)
-	csdn = CSDN(username,folder_name)
+	csdn = CSDN(username, folder_name, cookie_path)
 	csdn.start()
 	th1 = threading.Thread(target=csdn.write_readme)
 	th1.start()
@@ -196,15 +211,12 @@ def spider_user(username: str, thread_num: int = 10, folder_name: str = "article
 	th2.start()
 
 
-def spider(usernames: list, thread_num: int = 10, folder_name: str = "articles"):
+def spider(usernames: list, cookie_path:str, thread_num: int = 10, folder_name: str = "articles"):
 	for username in usernames:
 		try:
-			user_thread = threading.Thread(target=spider_user,args=(username, thread_num, folder_name))
+			user_thread = threading.Thread(target=spider_user,args=(username, cookie_path, thread_num, folder_name))
 			user_thread.start()
 			print("[++] 开启爬取 {} 博文进程成功 ......".format(username))
 		except Exception:
 			print("[--] 开启爬取 {} 博文进程出现异常 ......".format(username))
 
-
-if __name__ == "__main__":
-	spider(["ds19991999"])
