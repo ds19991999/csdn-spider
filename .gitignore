@@ -96,7 +96,7 @@ venv.bak/
 
 # Rope project settings
 .ropeproject
-
+cookie.txt
 # mkdocs documentation
 /site
 
