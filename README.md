@@ -26,7 +26,7 @@ csdn.spider("ds19991999", "cookie.txt")
 # 参数 usernames: str, cookie_path:str, folder_name: str = "blog"
 ```
 
-* 示例爬取博文效果： [ds19991999 的博文](blog/ds19991999/README.md)
+* 示例爬取博文效果： [ds19991999 的博文](https://github.com/ds19991999/csdn-spider/tree/master/blog/ds19991999)
 
 ## LICENSE
 
