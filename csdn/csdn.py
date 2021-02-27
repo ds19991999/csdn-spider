@@ -2,11 +2,8 @@
 # coding: utf-8
 
 
-import os, time, re
-import contextlib
-import sys
+import os, re
 import requests
-import threading
 from bs4 import BeautifulSoup, Comment
 from .tomd import Tomd
 
@@ -57,50 +54,12 @@ def delete_blank_ele(soup:BeautifulSoup, eles_except:list):
 			pass
 
 
-class TaskQueue(object):
-	def __init__(self):
-		self.VisitedList = []
-		self.UnVisitedList = []
-	
-	def getVisitedList(self):
-		return self.VisitedList
-
-	def getUnVisitedList(self):
-		return self.UnVisitedList
-	
-	def InsertVisitedList(self, url):
-		if url not in self.VisitedList:
-			self.VisitedList.append(url)
-	
-	def InsertUnVisitedList(self, url):
-		if url not in self.UnVisitedList:
-			self.UnVisitedList.append(url)
-	
-	def RemoveVisitedList(self, url):
-		self.VisitedList.remove(url)
-
-	def PopUnVisitedList(self,index=0):
-		url = []
-		if index and self.UnVisitedList:
-			url = self.UnVisitedList[index]
-			del self.UnVisitedList[:index]
-		elif self.UnVisitedList:
-			url = self.UnVisitedList.pop()
-		return url
-	
-	def getUnVisitedListLength(self):
-		return len(self.UnVisitedList)
-
-
 class CSDN(object):
 	def __init__(self, username, folder_name, cookie_path):
-		# self.headers = {
-		# 	"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.70 Safari/537.36"
-		# }
 		self.headers = get_headers(cookie_path)
 		self.s = requests.Session()
 		self.username = username
-		self.TaskQueue = TaskQueue()
+		self.TaskQueue = list()
 		self.folder_name = folder_name
 		self.url_num = 1
 
@@ -117,14 +76,13 @@ class CSDN(object):
 			for article in articles:
 				article_title = article.a.text.strip().replace('        ','：')
 				article_href = article.a['href']
-				with ensure_memory(sys.getsizeof(self.TaskQueue.UnVisitedList)):
-					self.TaskQueue.InsertUnVisitedList([article_title, article_href])
+				self.TaskQueue.append((article_title, article_href))
 	
 	def get_md(self, url):
 		response = self.s.get(url=url, headers=self.headers)
 		html = response.text
 		soup = BeautifulSoup(html, 'lxml')
-		content = soup.select_one("#content_views")
+		content = soup.select_one("#mainBox > main > div.blog-content-box")
 		# 删除注释
 		for useless_tag in content(text=lambda text: isinstance(text, Comment)):
 			useless_tag.extract()
@@ -141,7 +99,6 @@ class CSDN(object):
 		md = Tomd(str(content)).markdown
 		return md
 
-
 	def write_readme(self):
 		print("+"*100)
 		print("[++] 开始爬取 {} 的博文 ......".format(self.username))
@@ -150,73 +107,34 @@ class CSDN(object):
 		with open(reademe_path,'w', encoding='utf-8') as reademe_file:
 			readme_head = "# " + self.username + " 的博文\n"
 			reademe_file.write(readme_head)
-			for [article_title,article_href] in self.TaskQueue.UnVisitedList[::-1]:
+			self.TaskQueue.reverse()
+			for (article_title,article_href) in self.TaskQueue:
 					text = str(self.url_num) + '. [' + article_title + ']('+ article_href +')\n'
 					reademe_file.write(text)
 					self.url_num += 1
 		self.url_num = 1
 	
 	def get_all_articles(self):
-		try:
-			while True:
-				[article_title,article_href] = self.TaskQueue.PopUnVisitedList()
-				try:
-					file_name = re.sub(r'[\/:：*?"<>|]','-', article_title) + ".md"
-					artical_path = result_file(folder_username=self.username, file_name=file_name, folder_name=self.folder_name)
-					md_head = "# " + article_title + "\n"
-					md = md_head + self.get_md(article_href)
-					print("[++++] 正在处理URL：{}".format(article_href))
-					with open(artical_path, "w", encoding="utf-8") as artical_file:
-						artical_file.write(md)
-				except Exception:
-					print("[----] 处理URL异常：{}".format(article_href))
-				self.url_num += 1
-		except Exception:
-			pass
+		while len(self.TaskQueue) > 0:
+			(article_title,article_href) = self.TaskQueue.pop()
+			file_name = re.sub(r'[\/:：*?"<>|\n]','-', article_title) + ".md"
+			artical_path = result_file(folder_username=self.username, file_name=file_name, folder_name=self.folder_name)
 
-	def muti_spider(self, thread_num):
-		while self.TaskQueue.getUnVisitedListLength() > 0:
-			thread_list = []
-			for i in range(thread_num):
-				th = threading.Thread(target=self.get_all_articles)
-				thread_list.append(th)
-			for th in thread_list:
-				th.start()
+			md_head = "# " + article_title + "\n"
+			md = md_head + self.get_md(article_href)
+			print("[++++] 正在处理URL：{}".format(article_href))
+			with open(artical_path, "w", encoding="utf-8") as artical_file:
+				artical_file.write(md)
+			self.url_num += 1
 
 
-lock = threading.Lock()
-total_mem= 1024 * 1024 * 500 #500MB spare memory
-@contextlib.contextmanager
-def ensure_memory(size):
-    global total_mem
-    while 1:
-        with lock:
-            if total_mem > size:
-                total_mem-= size
-                break
-        time.sleep(5)
-    yield 
-    with lock:
-        total_mem += size
 
-
-def spider_user(username: str, cookie_path:str, thread_num: int = 10, folder_name: str = "articles"):
+def spider(username: str, cookie_path:str, folder_name: str = "blog"):
 	if not os.path.exists(folder_name):
 		os.makedirs(folder_name)
 	csdn = CSDN(username, folder_name, cookie_path)
 	csdn.start()
-	th1 = threading.Thread(target=csdn.write_readme)
-	th1.start()
-	th2 = threading.Thread(target=csdn.muti_spider, args=(thread_num,))
-	th2.start()
+	csdn.write_readme()
+	csdn.get_all_articles()
 
-
-def spider(usernames: list, cookie_path:str, thread_num: int = 10, folder_name: str = "articles"):
-	for username in usernames:
-		try:
-			user_thread = threading.Thread(target=spider_user,args=(username, cookie_path, thread_num, folder_name))
-			user_thread.start()
-			print("[++] 开启爬取 {} 博文进程成功 ......".format(username))
-		except Exception:
-			print("[--] 开启爬取 {} 博文进程出现异常 ......".format(username))
 

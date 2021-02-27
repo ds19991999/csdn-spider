@@ -22,9 +22,11 @@ python3 test.py # 需要先配置登录 cookie
 ## 爬取用户全部博文
 ```python
 import csdn
-csdn.spider(["ds19991999", "u013088062"], "cookie.txt",5)
-# 参数 usernames: list, cookie_path:str, thread_num: int = 10, folder_name: str = "articles"
+csdn.spider("ds19991999", "cookie.txt")
+# 参数 usernames: str, cookie_path:str, folder_name: str = "blog"
 ```
+
+* 示例爬取博文效果： [ds19991999 的博文](blog/ds19991999/README.md)
 
 ## LICENSE
 
